@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#009944">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="首都圏バス NAVI">
+  <title>首都圏バス NAVI</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@700;800&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root { --brand: #009944; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: #fff; color: #111;
+      height: 100dvh; overflow: hidden;
+      display: flex; flex-direction: column;
+      transition: background 0.35s, color 0.35s;
+    }
+    body.warning  { background: #FFD700 !important; color: #111 !important; }
+    body.critical { background: #111 !important;    color: #fff !important; }
+
+    /* ===== TOP BAR ===== */
+    #top-bar {
+      background: var(--brand); padding: 10px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0; gap: 10px; transition: background 0.35s;
+    }
+    body.warning  #top-bar { background: #e8a000; }
+    body.critical #top-bar { background: #000; }
+    #top-title { font-size: 16px; font-weight: 900; color: #fff; letter-spacing: 0.05em; }
+    #lang-btn {
+      font-size: 11px; font-weight: 700;
+      background: rgba(255,255,255,0.2); color: #fff;
+      border: 1.5px solid rgba(255,255,255,0.5);
+      border-radius: 8px; padding: 5px 12px; cursor: pointer;
+    }
+
+    /* ===== ZEBRA ===== */
+    .zebra {
+      height: 0; width: 100%; overflow: hidden; flex-shrink: 0;
+      background: repeating-linear-gradient(45deg, #FFD700 0, #FFD700 20px, #000 20px, #000 40px);
+      transition: height 0.3s ease;
+    }
+    .zebra.visible { height: 24px; }
+
+    /* ===== VIEWS ===== */
+    #view-search, #view-timetable, #view-countdown, #view-route {
+      flex: 1; display: none; flex-direction: column; overflow: hidden;
+    }
+    #view-search.active, #view-timetable.active, #view-countdown.active, #view-route.active { display: flex; }
+
+    /* ===== SEARCH VIEW ===== */
+    #search-bar {
+      padding: 10px 14px; background: #f4f4f4; border-bottom: 1px solid #ddd;
+      display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
+    }
+    #gps-btn {
+      width: 100%; padding: 13px;
+      font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700;
+      background: var(--brand); color: #fff;
+      border: none; border-radius: 12px; cursor: pointer; transition: opacity 0.2s;
+    }
+    #gps-btn:active { opacity: 0.7; }
+    #search-row { display: flex; gap: 8px; }
+    #search-input {
+      flex: 1; padding: 11px 14px;
+      font-family: 'Noto Sans JP', sans-serif; font-size: 14px;
+      border: 2px solid #ddd; border-radius: 12px; outline: none;
+      transition: border-color 0.2s;
+    }
+    #search-input:focus { border-color: var(--brand); }
+    #search-submit {
+      padding: 11px 16px;
+      font-family: 'Noto Sans JP', sans-serif; font-size: 13px; font-weight: 700;
+      background: #555; color: #fff;
+      border: none; border-radius: 12px; cursor: pointer; white-space: nowrap;
+    }
+    #search-submit:active { opacity: 0.7; }
+    #search-status { font-size: 11px; color: #aaa; padding: 0 2px; min-height: 14px; }
+
+    #stop-list {
+      flex: 1; overflow-y: auto; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .stop-card {
+      padding: 16px; border-radius: 14px; background: #f5f5f5;
+      border: 2px solid transparent; cursor: pointer;
+      display: flex; align-items: center; gap: 12px; transition: all 0.2s;
+    }
+    .stop-card:active { transform: scale(0.98); }
+    .stop-dist {
+      font-size: 12px; font-weight: 700; color: #fff;
+      background: var(--brand); border-radius: 8px;
+      padding: 4px 8px; flex-shrink: 0; min-width: 56px; text-align: center;
+    }
+    .stop-dist.no-gps { background: #999; }
+    .stop-name  { font-size: 16px; font-weight: 900; flex: 1; }
+    .stop-arrow { font-size: 18px; color: #ccc; }
+    .stop-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .stop-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .stop-op-badge {
+      font-size: 9px; font-weight: 700; color: #fff;
+      border-radius: 4px; padding: 2px 6px; white-space: nowrap; flex-shrink: 0;
+    }
+    .stop-routes { display: flex; flex-wrap: wrap; gap: 4px; }
+    .stop-route-tag {
+      font-size: 10px; font-weight: 700; color: #fff;
+      background: #888; border-radius: 4px; padding: 2px 6px;
+    }
+
+    /* ===== ROUTE SEARCH VIEW ===== */
+    #view-route { display: none; flex-direction: column; }
+    #view-route.active { display: flex; }
+    .route-section { padding: 12px 16px 0; }
+    .route-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .route-from-box {
+      background: #f5f5f5; border-radius: 10px; padding: 12px 14px;
+      font-size: 15px; font-weight: 700; color: #333;
+      border: 2px solid #e0e0e0; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .route-from-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .route-to-wrap { display: flex; gap: 8px; align-items: stretch; }
+    #route-to-input {
+      flex: 1; padding: 12px 14px; border-radius: 10px;
+      border: 2px solid #e0e0e0; font-size: 15px; outline: none;
+      background: #f9f9f9;
+    }
+    #route-to-input:focus { border-color: #009944; background: #fff; }
+    #route-search-btn {
+      background: #009944; color: #fff; border: none;
+      border-radius: 10px; padding: 0 18px; font-size: 15px; font-weight: 700;
+      cursor: pointer; white-space: nowrap;
+    }
+    #route-results { flex: 1; overflow-y: auto; padding: 12px 16px; }
+    .route-card {
+      background: #fff; border-radius: 12px; padding: 14px;
+      margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      cursor: pointer; transition: box-shadow 0.15s;
+    }
+    .route-card:active { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    .route-card-header { display: flex; gap: 6px; margin-bottom: 10px; align-items: center; }
+    .route-op-badge {
+      font-size: 10px; font-weight: 700; color: #fff;
+      border-radius: 4px; padding: 2px 8px;
+    }
+    .route-type-badge {
+      font-size: 10px; font-weight: 700; color: #009944;
+      border: 1.5px solid #009944; border-radius: 4px; padding: 2px 8px;
+    }
+    .route-line {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      font-size: 14px; margin-bottom: 4px;
+    }
+    .route-from-name { font-weight: 700; color: #333; }
+    .route-arrow-line { color: #009944; font-size: 12px; white-space: nowrap; }
+    .route-to-name { font-weight: 700; color: #009944; }
+    .route-meta { font-size: 11px; color: #aaa; }
+
+    /* ===== 検索画面タブ ===== */
+    .search-tabs { display: flex; border-bottom: 2px solid #eee; margin: 0; }
+    .search-tab {
+      flex: 1; text-align: center; padding: 12px 0; font-size: 13px; font-weight: 700;
+      color: #aaa; cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: color 0.15s;
+    }
+    .search-tab.active { color: #009944; border-bottom-color: #009944; }
+    #empty-msg {
+      text-align: center; color: #aaa; font-size: 13px;
+      margin-top: 60px; line-height: 2.4; white-space: pre-line;
+    }
+
+    /* ===== TIMETABLE VIEW ===== */
+    #tt-header {
+      padding: 12px 14px; background: #f4f4f4;
+      border-bottom: 1px solid #ddd; flex-shrink: 0; transition: background 0.35s;
+    }
+    body.warning  #tt-header { background: #e8c200; border-bottom-color: rgba(0,0,0,0.15); }
+    body.critical #tt-header { background: #000; border-bottom-color: #333; }
+    #tt-back {
+      font-size: 12px; font-weight: 700; color: var(--brand);
+      background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 6px;
+    }
+    body.warning  #tt-back { color: #333; }
+    body.critical #tt-back { color: #aaa; }
+    #tt-stop-name { font-size: 17px; font-weight: 900; }
+    body.critical #tt-stop-name { color: #fff; }
+
+    #tt-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
+    .tt-route-block { margin-bottom: 20px; }
+    .tt-route-label {
+      font-size: 12px; font-weight: 700; color: #fff;
+      background: var(--brand); border-radius: 6px;
+      padding: 4px 12px; display: inline-block; margin-bottom: 10px;
+    }
+    .tt-times { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tt-time-chip {
+      font-family: 'Archivo Narrow', sans-serif;
+      font-size: 14px; font-weight: 700;
+      background: #f0f0f0; border-radius: 8px;
+      padding: 6px 12px; cursor: pointer;
+      border: 2px solid transparent; transition: all 0.15s;
+    }
+    .tt-time-chip.next { background: var(--brand); color: #fff; border-color: var(--brand); transform: scale(1.08); }
+    .tt-time-chip.past { color: #ccc; background: #fafafa; }
+
+    /* ===== COUNTDOWN VIEW ===== */
+    #cd-header {
+      padding: 12px 14px; background: #f4f4f4;
+      border-bottom: 1px solid #ddd; flex-shrink: 0;
+      transition: background 0.35s, border-color 0.35s;
+    }
+    body.warning  #cd-header { background: #e8c200; border-bottom-color: rgba(0,0,0,0.15); }
+    body.critical #cd-header { background: #000; border-bottom-color: #333; }
+    #cd-back {
+      font-size: 12px; font-weight: 700; color: var(--brand);
+      background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 4px;
+    }
+    body.warning  #cd-back { color: #333; }
+    body.critical #cd-back { color: #aaa; }
+    #cd-stop-name  { font-size: 15px; font-weight: 900; }
+    #cd-route-name { font-size: 11px; color: #888; margin-top: 2px; font-weight: 700; }
+    body.critical #cd-stop-name  { color: #fff; }
+    body.warning  #cd-route-name { color: rgba(0,0,0,0.5); }
+    body.critical #cd-route-name { color: #555; }
+    body.critical #cd-service-end { color: #ff5555; }
+    body.warning  #cd-service-end { color: #c00; }
+
+    #cd-main {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 20px 16px; text-align: center;
+    }
+    #cd-warning-badge {
+      font-family: 'Archivo Narrow', sans-serif;
+      font-size: 15px; font-weight: 800; letter-spacing: 0.35em;
+      color: #c00; height: 20px; opacity: 0; transition: opacity 0.3s;
+    }
+    body.warning  #cd-warning-badge { opacity: 1; color: #c00; }
+    body.critical #cd-warning-badge { opacity: 1; color: #ff5555; }
+
+    #cd-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.4em; color: #aaa;
+      margin-top: 8px; margin-bottom: -4px;
+    }
+    body.warning  #cd-label { color: rgba(0,0,0,0.5); }
+    body.critical #cd-label { color: rgba(255,255,255,0.55) !important; }
+
+    #countdown {
+      display: flex; align-items: baseline; justify-content: center;
+      font-family: 'Archivo Narrow', sans-serif; font-weight: 800;
+      transform: scaleX(0.88); transform-origin: center;
+      color: var(--brand); transition: color 0.35s; line-height: 1;
+    }
+    body.warning  #countdown { color: #111; }
+    body.critical #countdown { color: #fff !important; }
+
+    #cd-min, #cd-sec { font-size: clamp(68px, 20vw, 96px); letter-spacing: -0.02em; }
+    #cd-ms  { font-size: clamp(34px, 10vw, 50px); margin-left: 2px; }
+    .cd-unit { font-size: clamp(20px, 5vw, 30px); margin: 0 2px; font-weight: 700; }
+
+    #cd-next-time {
+      font-size: 13px; font-weight: 700; color: #aaa; margin-top: 12px;
+    }
+    body.warning  #cd-next-time { color: rgba(0,0,0,0.5); }
+    body.critical #cd-next-time { color: #555; }
+
+    #cd-tt-link {
+      margin-top: 24px; padding: 12px 32px;
+      background: none; border: 2px solid var(--brand); color: var(--brand);
+      border-radius: 99px; font-family: 'Noto Sans JP', sans-serif;
+      font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    #cd-tt-link:active { background: var(--brand); color: #fff; }
+    body.warning  #cd-tt-link { border-color: #333; color: #333; }
+    body.critical #cd-tt-link { border-color: rgba(255,255,255,0.4); color: rgba(255,255,255,0.7); }
+
+    /* ===== BOTTOM AREA ===== */
+    #bottom-area {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      display: flex; flex-direction: column;
+      transition: background 0.35s;
+      z-index: 100;
+    }
+    #credit {
+      text-align: center; font-size: 9px; color: #bbb;
+      padding: 4px 12px 2px; letter-spacing: 0.02em;
+      background: #fff;
+      transition: color 0.35s, background 0.35s;
+    }
+    body.warning  #credit { color: rgba(0,0,0,0.3); background: #FFD700; }
+    body.critical #credit { color: #444; background: #111; }
+
+    #ad-wrap {
+      background: #fff; border-top: 1px solid #eee;
+      min-height: 62px; overflow: hidden;
+      transition: background 0.35s, border-color 0.35s;
+    }
+    body.warning  #ad-wrap { background: #FFD700; border-top-color: rgba(0,0,0,0.12); }
+    body.critical #ad-wrap { background: #111; border-top-color: #2a2a2a; }
+
+    /* bottom-areaの高さ分だけ各viewにpadding-bottomを確保 */
+    #view-search, #view-timetable, #view-countdown, #view-route { padding-bottom: 80px; }
+  </style>
+</head>
+<body>
+
+<div id="top-bar">
+  <div id="top-title">🚌 首都圏バス NAVI</div>
+  <button id="lang-btn" onclick="toggleLang()">EN</button>
+</div>
+
+<div id="zebra-top" class="zebra"></div>
+
+<!-- SEARCH VIEW -->
+<div id="view-search" class="active">
+  <div id="search-bar">
+    <button id="gps-btn" onclick="searchNearby()">📍 現在地のバス停を検索</button>
+    <div id="search-row">
+      <input id="search-input" type="text" placeholder="バス停名で検索（例：新宿）"
+        onkeydown="if(event.key==='Enter') searchByName()">
+      <button id="search-submit" onclick="searchByName()">検索</button>
+    </div>
+    <div id="search-status"></div>
+  </div>
+  <div id="stop-list">
+    <div id="empty-msg">バス停名を入力するか&#10;現在地ボタンで検索できます</div>
+  </div>
+  <div id="route-search-hint" style="display:none;padding:8px 16px 12px;">
+    <button onclick="openRouteSearch()" style="width:100%;padding:12px;background:#f0f9f4;color:#009944;border:2px solid #009944;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">
+      🗺 このバス停からルート検索
+    </button>
+  </div>
+</div>
+
+<!-- TIMETABLE VIEW -->
+<div id="view-timetable">
+  <div id="tt-header">
+    <button id="tt-back" onclick="showSearch()">◀ もどる</button>
+    <div id="tt-stop-name">---</div>
+  </div>
+  <div id="tt-body"></div>
+</div>
+
+<!-- ROUTE SEARCH VIEW -->
+<div id="view-route">
+  <div id="tt-header">
+    <button id="route-back" onclick="showSearch()">◀ もどる</button>
+    <div>ルート検索</div>
+  </div>
+  <div class="route-section">
+    <div class="route-label">出発バス停</div>
+    <div class="route-from-box">
+      <span class="route-from-dot" id="route-from-dot" style="background:#009944"></span>
+      <span id="route-from-label">出発バス停を先に選択してください</span>
+    </div>
+    <div class="route-label">目的地バス停名</div>
+    <div class="route-to-wrap">
+      <input id="route-to-input" type="text" placeholder="例：渋谷駅、練馬車庫前"
+             onkeydown="if(event.key==='Enter')searchRoute()">
+      <button id="route-search-btn" onclick="searchRoute()">検索</button>
+    </div>
+  </div>
+  <div id="route-results"></div>
+</div>
+
+<!-- COUNTDOWN VIEW -->
+<div id="view-countdown">
+  <div id="cd-header">
+    <button id="cd-back" onclick="showTimetable()">◀ 時刻表へ</button>
+    <div id="cd-stop-name">---</div>
+    <div id="cd-route-name">---</div>
+  </div>
+  <div id="cd-main">
+    <div id="cd-warning-badge">W A R N I N G</div>
+    <div id="cd-service-end" style="display:none;font-size:13px;font-weight:700;color:#c00;letter-spacing:0.05em;margin-bottom:4px">本日の運行は終了しました</div>
+    <div id="cd-label">発車まで　あと</div>
+    <div id="countdown">
+      <span id="cd-min">--</span><span class="cd-unit">分</span>
+      <span id="cd-sec">--</span><span class="cd-unit">秒</span>
+      <span id="cd-ms">--</span>
+    </div>
+    <div id="cd-next-time"></div>
+    <button id="cd-tt-link" onclick="showTimetable()">時刻表を見る</button>
+  </div>
+</div>
+
+<div id="zebra-bottom" class="zebra"></div>
+
+<div id="bottom-area">
+  <div id="credit">@MTDesignWorks / 東京都交通局・公共交通オープンデータ協議会</div>
+  <!-- 忍者AD挿入ポイント -->
+  <div id="ad-wrap"></div>
+</div>
+
+<script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/tokyo_buss/sw.js')
+          .then(function(reg) { console.log('SW registered:', reg.scope); })
+          .catch(function(err) { console.log('SW error:', err); });
+      });
+    }
+  </script>
+</body>
+</html>
