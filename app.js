@@ -1,7 +1,7 @@
 // =============================================
 //  CONFIG
 // =============================================
-const WORKER_URL = 'https://odpt-proxy-toei-bus.takahara-design.workers.dev/';
+const WORKER_URL = 'https://odpt-proxy-tokyoi-bus.takahara-design.workers.dev/';
 
 const WARN_MS     = 3 * 60 * 1000;
 const CRITICAL_MS = 1 * 60 * 1000;
