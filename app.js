@@ -1,0 +1,650 @@
+// =============================================
+//  CONFIG
+// =============================================
+const WORKER_URL = 'https://odpt-proxy-toei-bus.takahara-design.workers.dev/';
+
+const WARN_MS     = 3 * 60 * 1000;
+const CRITICAL_MS = 1 * 60 * 1000;
+
+// =============================================
+//  路線ID → 日本語名変換
+// =============================================
+const ROUTE_NAME_MAP = {
+  // 白
+  'Shiro61':'白６１', 'Shiro62':'白６２',
+  // 宿
+  'Shuku74':'宿７４', 'Shuku75':'宿７５', 'Shuku91':'宿９１',
+  // 早
+  'Haya77':'早７７',
+  // 王
+  'Ou78':'王７８',
+  // 品
+  'Shina97':'品９７', 'Shina98':'品９８', 'Shina99':'品９９',
+  // 千（環状）
+  'CH01':'千０１',
+  // 東
+  'Higashi40':'東４０', 'Higashi41':'東４１',
+  // 渋
+  'Shibu88':'渋８８',
+  // 池
+  'Ike86':'池８６', 'Ike87':'池８７',
+  // 橋
+  'Hashi63':'橋６３',
+  // 錦
+  'Nishi10':'錦１０',
+  // 都
+  'To01':'都０１',
+  // 急
+  'Kyu98':'急９８',
+  // 梅
+  'Ume70':'梅７０',
+};
+
+function toRouteLabel(id) {
+  if (ROUTE_NAME_MAP[id]) return ROUTE_NAME_MAP[id];
+  // フォールバック：英字プレフィクスを除いて数字だけ残す
+  return id;
+}
+
+// =============================================
+//  多言語
+// =============================================
+let lang = 'ja';
+
+const I18N = {
+  ja: {
+    appTitle:          '🚌 首都圏バス NAVI',
+    langBtn:           'EN',
+    gpsBtn:            '📍 現在地のバス停を検索',
+    gpsSearching:      '位置情報取得中...',
+    gpsError:          'GPS取得失敗。バス停名で検索してください',
+    searchPlaceholder: 'バス停名で検索（例：新宿）',
+    searchBtn:         '検索',
+    searching:         '検索中...',
+    emptyMsg:          'バス停名を入力するか\n現在地ボタンで検索できます',
+    noStops:           '見つかりませんでした',
+    back:              'もどる',
+    ttBack:            '時刻表へ',
+    cdLabel:           '発車まで　あと',
+    cdTtLink:          '時刻表を見る',
+    firstBusLabel:     '始発まで　あと',
+    loading:           '読み込み中...',
+    noTimetable:       '時刻表データがありません',
+    meter:             'm',
+    nearStop:          'バス停',
+    routeTab:          'ルート検索',
+    stopTab:           'バス停検索',
+    routeFrom:         '出発バス停',
+    routeTo:           '目的地バス停名',
+    routeSearch:       'ルート検索',
+    routeSearching:    '検索中...',
+    directRoute:       '直通',
+    stops:             '停留所',
+    noRoute:           '直通ルートが見つかりません',
+    selectFrom:        '出発バス停を選択してください',
+    selectDest:        '目的地バス停名を入力してください',
+  },
+  en: {
+    appTitle:          '🚌 Metro Bus NAVI',
+    langBtn:           '日本語',
+    gpsBtn:            '📍 Find Nearby Bus Stops',
+    gpsSearching:      'Getting location...',
+    gpsError:          'GPS failed. Try searching by name',
+    searchPlaceholder: 'Search stop name (e.g. Shinjuku)',
+    searchBtn:         'Search',
+    searching:         'Searching...',
+    emptyMsg:          'Enter a stop name or\ntap the location button',
+    noStops:           'No stops found',
+    back:              'Back',
+    ttBack:            'Timetable',
+    cdLabel:           'Departing in',
+    cdTtLink:          'View Timetable',
+    firstBusLabel:     'Until First Bus',
+    loading:           'Loading...',
+    noTimetable:       'No timetable available',
+    meter:             'm',
+    nearStop:          'Stop',
+    routeTab:          'Route Search',
+    stopTab:           'Stop Search',
+    routeFrom:         'From Stop',
+    routeTo:           'Destination Stop',
+    routeSearch:       'Search Route',
+    routeSearching:    'Searching...',
+    directRoute:       'Direct',
+    stops:             'stops',
+    noRoute:           'No direct route found',
+    selectFrom:        'Please select a departure stop first',
+    selectDest:        'Enter destination stop name',
+  },
+};
+
+function t(key) { return I18N[lang][key] || key; }
+
+function toggleLang() {
+  lang = lang === 'ja' ? 'en' : 'ja';
+  applyLang();
+}
+
+function applyLang() {
+  document.getElementById('top-title').textContent         = t('appTitle');
+  document.getElementById('lang-btn').textContent          = t('langBtn');
+  document.getElementById('gps-btn').textContent           = t('gpsBtn');
+  document.getElementById('cd-label').textContent          = t('cdLabel');
+  document.getElementById('cd-tt-link').textContent        = t('cdTtLink');
+  document.getElementById('search-input').placeholder      = t('searchPlaceholder');
+  document.getElementById('search-submit').textContent     = t('searchBtn');
+  document.getElementById('tt-back').textContent           = '◀ ' + t('back');
+  document.getElementById('cd-back').textContent           = '◀ ' + t('ttBack');
+  var routeFromLabel = document.getElementById('route-from-label');
+  if (routeFromLabel && !routeFromStop) routeFromLabel.textContent = t('selectFrom');
+  const emptyMsg = document.getElementById('empty-msg');
+  if (emptyMsg) emptyMsg.textContent = t('emptyMsg');
+}
+
+// =============================================
+//  STATE
+// =============================================
+let currentStop      = null;
+let currentTimetable = [];
+let cdTargetMs       = null;
+let cdRouteName      = '';
+let tickTimer        = null;
+
+// =============================================
+//  VIEW SWITCH
+// =============================================
+function showView(id) {
+  ['view-search','view-timetable','view-countdown','view-route'].forEach(v => {
+    var el = document.getElementById(v);
+    if (el) el.classList.remove('active');
+  });
+  document.getElementById(id).classList.add('active');
+  if (id !== 'view-countdown') {
+    clearAlert();
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  }
+}
+function showSearch()    { showView('view-search'); }
+function showTimetable() { showView('view-timetable'); }
+
+var cdIsFirstBus = false;
+
+function showCountdown(targetMs, routeName, isFirstBus) {
+  cdTargetMs   = targetMs;
+  cdRouteName  = routeName;
+  cdIsFirstBus = !!isFirstBus;
+  document.getElementById('cd-stop-name').textContent  = currentStop ? currentStop.name : '';
+  document.getElementById('cd-route-name').textContent = routeName;
+  // 運行終了モードの初期表示
+  var endEl = document.getElementById('cd-service-end');
+  if (endEl) endEl.style.display = cdIsFirstBus ? '' : 'none';
+  var labelEl = document.getElementById('cd-label');
+  if (labelEl) labelEl.textContent = cdIsFirstBus ? t('firstBusLabel') : t('cdLabel');
+  showView('view-countdown');
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(tick, 16);
+}
+
+// =============================================
+//  GPS検索
+// =============================================
+function searchNearby() {
+  const btn    = document.getElementById('gps-btn');
+  const status = document.getElementById('search-status');
+  btn.disabled    = true;
+  btn.textContent = t('gpsSearching');
+  status.textContent = '';
+
+  if (!navigator.geolocation) {
+    status.textContent  = t('gpsError');
+    btn.disabled        = false;
+    btn.textContent     = t('gpsBtn');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async function(pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+      status.textContent = lat.toFixed(4) + ', ' + lng.toFixed(4);
+      try {
+        var url  = WORKER_URL + '?mode=stops&lat=' + lat + '&lng=' + lng + '&radius=400';
+        var res  = await fetch(url);
+        var data = await res.json();
+        renderStopList(data, true);
+      } catch(e) {
+        renderStopList([], true);
+        console.error(e);
+      }
+      btn.disabled    = false;
+      btn.textContent = t('gpsBtn');
+    },
+    function() {
+      status.textContent  = t('gpsError');
+      btn.disabled        = false;
+      btn.textContent     = t('gpsBtn');
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+// =============================================
+//  バス停名検索
+// =============================================
+async function searchByName() {
+  var input  = document.getElementById('search-input');
+  var status = document.getElementById('search-status');
+  var submit = document.getElementById('search-submit');
+  var query  = input.value.trim();
+  if (!query) return;
+
+  submit.disabled     = true;
+  status.textContent  = t('searching');
+
+  try {
+    var url  = WORKER_URL + '?mode=search&q=' + encodeURIComponent(query);
+    var res  = await fetch(url);
+    var data = await res.json();
+    renderStopList(data, false);
+    status.textContent = data.length ? data.length + '件' : t('noStops');
+  } catch(e) {
+    status.textContent = t('noStops');
+    renderStopList([], false);
+    console.error(e);
+  }
+  submit.disabled = false;
+}
+
+// =============================================
+//  バス停リスト描画
+// =============================================
+function renderStopList(stops, hasGps) {
+  var list    = document.getElementById('stop-list');
+  var oldMsg  = document.getElementById('empty-msg');
+  if (oldMsg) oldMsg.remove();
+
+  if (!stops || !stops.length) {
+    list.innerHTML = '<div id="empty-msg" style="text-align:center;color:#aaa;font-size:13px;margin-top:60px;line-height:2.4;white-space:pre-line">' + t('noStops') + '</div>';
+    return;
+  }
+
+  list.innerHTML = stops.map(function(stop) {
+    var distLabel = (hasGps && stop.distance != null)
+      ? stop.distance + t('meter')
+      : t('nearStop');
+    var distCls = (hasGps && stop.distance != null) ? '' : 'no-gps';
+    var routeTags = '';
+    if (stop.routes && stop.routes.length) {
+      routeTags = '<div class="stop-routes">'
+        + stop.routes.map(function(r) { return '<span class="stop-route-tag">' + escHtml(toRouteLabel(r)) + '</span>'; }).join('')
+        + '</div>';
+    }
+    var opBadge = stop.operatorName
+      ? '<span class="stop-op-badge" style="background:' + (stop.operatorColor||'#888') + '">' + escHtml(stop.operatorName) + '</span>'
+      : '';
+    return '<div class="stop-card" onclick="selectStop(\'' + escHtml(stop.id) + '\',\'' + escHtml(stop.name) + '\',\'' + (stop.operatorColor||'#009944') + '\')">'
+      + '<span class="stop-dist ' + distCls + '">' + distLabel + '</span>'
+      + '<div class="stop-info"><div class="stop-name-row">' + opBadge + '<span class="stop-name">' + escHtml(stop.name) + '</span></div>' + routeTags + '</div>'
+      + '<span class="stop-arrow">›</span>'
+      + '</div>';
+  }).join('');
+}
+
+function escHtml(str) {
+  return String(str).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+// =============================================
+//  時刻表
+// =============================================
+async function selectStop(id, name, operatorColor) {
+  currentStop = { id: id, name: name };
+  // ルート検索の出発地として記憶
+  setRouteFrom(id, name, operatorColor);
+  // ルート検索ヒントボタンを表示
+  var hint = document.getElementById('route-search-hint');
+  if (hint) hint.style.display = '';
+  // 出発バス停のドット色を更新
+  var dot = document.getElementById('route-from-dot');
+  if (dot) dot.style.background = operatorColor || '#009944';
+  document.getElementById('tt-stop-name').textContent = name;
+  document.getElementById('tt-body').innerHTML =
+    '<p style="text-align:center;color:#aaa;padding:40px 0">' + t('loading') + '</p>';
+
+  try {
+    var url  = WORKER_URL + '?mode=timetable&pole=' + encodeURIComponent(id);
+    var res  = await fetch(url);
+    var data = await res.json();
+    parseTimetable(data);
+    renderTimetable();
+    // 次便を自動検出してカウントダウン画面へ
+    var result = findNextBus();
+    if (result) {
+      showCountdown(result.bus.ms, result.bus.route, result.isFirstBus);
+    } else {
+      showView('view-timetable');
+    }
+  } catch(e) {
+    document.getElementById('tt-body').innerHTML =
+      '<p style="text-align:center;color:#aaa;padding:40px 0">' + t('noTimetable') + '</p>';
+    showView('view-timetable');
+    console.error(e);
+  }
+}
+
+function findNextBus() {
+  var now     = nowMs();
+  var closest = null;   // 今日の次便
+  var first   = null;   // 今日の始発（翌朝表示用）
+
+  currentTimetable.forEach(function(item) {
+    item.times.forEach(function(time) {
+      var ms = timeStrToMs(time);
+      if (ms > now) {
+        if (!closest || ms < closest.ms) closest = { ms: ms, route: item.route };
+      }
+      // 始発 = 一番早い時刻
+      if (!first || ms < first.ms) first = { ms: ms, route: item.route };
+    });
+  });
+
+  if (closest) return { bus: closest, isFirstBus: false };
+  if (first)   return { bus: first,   isFirstBus: true  };
+  return null;
+}
+
+function getTodayCalendar() {
+  var dow = new Date().getDay();
+  return (dow === 0 || dow === 6) ? 'SaturdayHoliday' : 'Weekday';
+}
+
+function nowMs() {
+  var n = new Date();
+  return (n.getHours() * 3600 + n.getMinutes() * 60 + n.getSeconds()) * 1000
+       + n.getMilliseconds();
+}
+
+function timeStrToMs(str) {
+  var parts = str.split(':').map(Number);
+  return (parts[0] * 3600 + parts[1] * 60) * 1000;
+}
+
+function addEntry(entry, routes) {
+  var objects  = entry['odpt:busstopPoleTimetableObject'] || [];
+  var destSign = objects.length > 0 ? (objects[0]['odpt:destinationSign'] || '') : '';
+  var destRaw  = entry['odpt:destinationBusstopPole'] || '';
+  var dest     = destRaw.split('.').pop() || '';
+  var label    = destSign || dest || (entry['odpt:busroute'] || '').split('.').pop() || '不明';
+  var times = objects
+    .map(function(o) { return o['odpt:departureTime'] || o['odpt:arrivalTime']; })
+    .filter(Boolean).sort();
+  if (!times.length) return;
+  if (!routes[label]) routes[label] = [];
+  routes[label] = Array.from(new Set(routes[label].concat(times))).sort();
+}
+
+function parseTimetable(data) {
+  var dow = new Date().getDay();
+  var isWeekday = (dow !== 0 && dow !== 6);
+  var routes = {};
+
+  // パス1: 今日の曜日に合うエントリのみ
+  data.forEach(function(entry) {
+    var title      = (entry['dc:title'] || '') + (entry['odpt:note'] || '');
+    var hasWeekday = title.includes('\u5e73\u65e5'); // 平日
+    var hasHoliday = title.includes('\u4f11\u65e5'); // 休日
+    if (hasWeekday || hasHoliday) {
+      if (isWeekday  && !hasWeekday) return;
+      if (!isWeekday && !hasHoliday) return;
+    }
+    addEntry(entry, routes);
+  });
+
+  // パス2: パス1で空なら全エントリを通す
+  if (Object.keys(routes).length === 0) {
+    data.forEach(function(entry) { addEntry(entry, routes); });
+  }
+
+  currentTimetable = Object.keys(routes).map(function(route) {
+    return { route: route, times: routes[route] };
+  });
+}
+
+function renderTimetable() {
+  var body = document.getElementById('tt-body');
+  if (!currentTimetable.length) {
+    body.innerHTML = '<p style="text-align:center;color:#aaa;padding:40px 0">' + t('noTimetable') + '</p>';
+    return;
+  }
+  var now = nowMs();
+  body.innerHTML = currentTimetable.map(function(item) {
+    var route   = item.route;
+    var times   = item.times;
+    var nextIdx = times.findIndex(function(tm) { return timeStrToMs(tm) > now; });
+    var chips   = times.map(function(time, i) {
+      var ms  = timeStrToMs(time);
+      var cls = (i === nextIdx) ? 'next' : (ms <= now ? 'past' : '');
+      return '<div class="tt-time-chip ' + cls + '" onclick="onChipClick(\'' + time + '\',\'' + escHtml(route) + '\')">' + time + '</div>';
+    }).join('');
+    return '<div class="tt-route-block">'
+      + '<div class="tt-route-label">' + escHtml(route) + '</div>'
+      + '<div class="tt-times">' + chips + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function onChipClick(timeStr, routeName) {
+  showCountdown(timeStrToMs(timeStr), routeName, false);
+}
+
+// =============================================
+//  COUNTDOWN
+// =============================================
+function tick() {
+  if (cdTargetMs === null) return;
+  var now  = nowMs();
+  var diff = cdTargetMs - now;
+
+  if (cdIsFirstBus && diff < 0) diff += 86400000;
+  if (!cdIsFirstBus && diff < -60000) diff += 86400000;
+  diff = Math.max(0, diff);
+
+  var elMin  = document.getElementById('cd-min');
+  var elSec  = document.getElementById('cd-sec');
+  var elMs   = document.getElementById('cd-ms');
+  var elCnt  = document.getElementById('countdown');
+  var elNext = document.getElementById('cd-next-time');
+  var units  = elCnt ? elCnt.querySelectorAll('.cd-unit') : [];
+
+  if (diff >= 3600000) {
+    // 1時間以上 → H時間MM分
+    var h   = Math.floor(diff / 3600000);
+    var min = Math.floor((diff % 3600000) / 60000);
+    if (elMin) elMin.textContent = String(h);
+    if (elSec) elSec.textContent = String(min).padStart(2, '0');
+    if (elMs)  { elMs.textContent = ''; elMs.style.display = 'none'; }
+    if (units[0]) units[0].textContent = '時間';
+    if (units[1]) units[1].textContent = '分';
+    if (units[2]) units[2].style.display = 'none';
+  } else {
+    // 1時間未満 → MM分SS秒MS
+    var m  = Math.floor(diff / 60000);
+    var s  = Math.floor((diff % 60000) / 1000);
+    var ms = Math.floor((diff % 1000) / 10);
+    if (elMin) elMin.textContent = String(m).padStart(2,'0');
+    if (elSec) elSec.textContent = String(s).padStart(2,'0');
+    if (elMs)  { elMs.textContent = String(ms).padStart(2,'0'); elMs.style.display = ''; }
+    if (units[0]) units[0].textContent = '分';
+    if (units[1]) units[1].textContent = '秒';
+    if (units[2]) units[2].style.display = '';
+  }
+
+  var h2   = Math.floor(cdTargetMs / 3600000) % 24;
+  var min2 = Math.floor((cdTargetMs % 3600000) / 60000);
+  if (elNext) elNext.textContent =
+    String(h2).padStart(2,'0') + ':' + String(min2).padStart(2,'0') + (cdIsFirstBus ? ' 始発' : ' 発');
+
+  if (cdIsFirstBus) {
+    clearAlert();
+  } else {
+    updateAlertState(diff);
+  }
+}
+
+// =============================================
+//  ALERT STATE
+// =============================================
+function updateAlertState(diffMs) {
+  var body = document.body;
+  var zt   = document.getElementById('zebra-top');
+  var zb   = document.getElementById('zebra-bottom');
+  if (!zt || !zb) return;
+  body.classList.remove('warning','critical');
+  zt.classList.remove('visible');
+  zb.classList.remove('visible');
+  if (diffMs < CRITICAL_MS) {
+    body.classList.add('critical');
+    zt.classList.add('visible'); zb.classList.add('visible');
+  } else if (diffMs < WARN_MS) {
+    body.classList.add('warning');
+    zt.classList.add('visible'); zb.classList.add('visible');
+  }
+}
+
+function clearAlert() {
+  document.body.classList.remove('warning','critical');
+  var zt = document.getElementById('zebra-top');
+  var zb = document.getElementById('zebra-bottom');
+  if (zt) zt.classList.remove('visible');
+  if (zb) zb.classList.remove('visible');
+}
+
+// =============================================
+//  INIT
+// =============================================
+applyLang();
+
+// =============================================
+//  ルート検索
+// =============================================
+var routeFromStop = null;  // { id, name, operatorColor }
+
+function openRouteSearch() {
+  var fromEl = document.getElementById('route-from-label');
+  if (fromEl) {
+    fromEl.textContent = routeFromStop
+      ? routeFromStop.name
+      : t('selectFrom');
+  }
+  document.getElementById('route-to-input').value = '';
+  document.getElementById('route-results').innerHTML = '';
+  showView('view-route');
+}
+
+function setRouteFrom(id, name, operatorColor) {
+  routeFromStop = { id: id, name: name, operatorColor: operatorColor || '#009944' };
+}
+
+async function searchRoute() {
+  if (!routeFromStop) {
+    alert(t('selectFrom'));
+    return;
+  }
+  var toQuery = document.getElementById('route-to-input').value.trim();
+  if (!toQuery) {
+    alert(t('selectDest'));
+    return;
+  }
+
+  var btn     = document.getElementById('route-search-btn');
+  var results = document.getElementById('route-results');
+  btn.disabled    = true;
+  btn.textContent = t('routeSearching');
+  results.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px 0">検索中...</p>';
+
+  try {
+    var url  = WORKER_URL + '?mode=route&from=' + encodeURIComponent(routeFromStop.id)
+                          + '&to=' + encodeURIComponent(toQuery);
+    var res  = await fetch(url);
+    var data = await res.json();
+    renderRouteResults(data);
+  } catch(e) {
+    results.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px 0">エラーが発生しました</p>';
+    console.error(e);
+  }
+  btn.disabled    = false;
+  btn.textContent = t('routeSearch');
+}
+
+function renderRouteResults(data) {
+  var el = document.getElementById('route-results');
+
+  if (!data.routes || !data.routes.length) {
+    el.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px 0;line-height:2">'
+      + t('noRoute') + '<br><small>別の目的地バス停名を試してください</small></p>';
+    return;
+  }
+
+  el.innerHTML = data.routes.map(function(r) {
+    var color = r.operatorColor || '#009944';
+    return '<div class="route-card" onclick="selectRoute(\'' + escHtml(r.from.id) + '\',\''
+      + escHtml(r.routeName) + '\',\'' + escHtml(r.to.name) + '\')">'
+      + '<div class="route-card-header">'
+      + '<span class="route-op-badge" style="background:' + color + '">' + escHtml(r.operatorName) + '</span>'
+      + '<span class="route-type-badge">' + t('directRoute') + '</span>'
+      + '</div>'
+      + '<div class="route-card-body">'
+      + '<div class="route-line">'
+      + '<span class="route-from-name">' + escHtml(r.from.name) + '</span>'
+      + '<span class="route-arrow-line">―― ' + escHtml(r.routeName) + ' ──▶</span>'
+      + '<span class="route-to-name">' + escHtml(r.to.name) + '</span>'
+      + '</div>'
+      + '<div class="route-meta">' + r.stopsCount + ' ' + t('stops') + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function selectRoute(fromPoleId, routeName, toName) {
+  // 出発バス停の時刻表を取得してカウントダウンへ
+  currentStop = routeFromStop;
+  var destLabel = document.getElementById('cd-route-name');
+  // 行先として to名を表示
+  selectStopForRoute(fromPoleId, routeName, toName);
+}
+
+async function selectStopForRoute(poleId, routeName, toName) {
+  currentStop = routeFromStop;
+  document.getElementById('tt-stop-name').textContent = (routeFromStop ? routeFromStop.name : '') + ' → ' + toName;
+  showView('view-timetable');
+  document.getElementById('tt-body').innerHTML =
+    '<p style="text-align:center;color:#aaa;padding:40px 0">' + t('loading') + '</p>';
+
+  try {
+    var url  = WORKER_URL + '?mode=timetable&pole=' + encodeURIComponent(poleId);
+    var res  = await fetch(url);
+    var data = await res.json();
+    parseTimetable(data);
+    // 指定路線のみ表示
+    currentTimetable = currentTimetable.filter(function(item) {
+      return item.route === routeName || item.route.includes(routeName);
+    });
+    if (!currentTimetable.length) {
+      // フィルタで全消えたら全部表示
+      parseTimetable(data);
+    }
+    renderTimetable();
+    var next = findNextBus();
+    if (next) {
+      showCountdown(next.bus.ms, next.bus.route, next.isFirstBus);
+    } else {
+      showView('view-timetable');
+    }
+  } catch(e) {
+    document.getElementById('tt-body').innerHTML =
+      '<p style="text-align:center;color:#aaa;padding:40px 0">' + t('noTimetable') + '</p>';
+    showView('view-timetable');
+  }
+}
