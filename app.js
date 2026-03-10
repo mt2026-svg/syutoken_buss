@@ -79,10 +79,10 @@ const I18N = {
     gpsBtn:            '📍 Find Nearby Bus Stops',
     gpsSearching:      'Getting location...',
     gpsError:          'GPS failed. Try searching by name',
-    searchPlaceholder: 'Search stop name (e.g. Shinjuku)',
+    searchPlaceholder: 'Stop name (e.g. Shinjuku, Shibuya)',
     searchBtn:         'Search',
     searching:         'Searching...',
-    emptyMsg:          'Enter a stop name or\ntap the location button',
+    emptyMsg:          'Enter a stop name in English or Japanese\n(e.g. Shinjuku, Shibuya)',
     noStops:           'No stops found',
     back:              'Back',
     ttBack:            'Timetable',
@@ -113,8 +113,8 @@ function applyLang() {
   document.getElementById('search-submit').textContent     = t('searchBtn');
   document.getElementById('tt-back').textContent           = '◀ ' + t('back');
   document.getElementById('cd-back').textContent           = '◀ ' + t('ttBack');
-  const emptyMsg = document.getElementById('empty-msg');
-  if (emptyMsg) emptyMsg.textContent = t('emptyMsg');
+  const emptyText = document.getElementById('empty-text');
+  if (emptyText) emptyText.textContent = t('emptyMsg');
 }
 
 // =============================================
@@ -240,7 +240,7 @@ function renderStopList(stops, hasGps) {
   if (oldMsg) oldMsg.remove();
 
   if (!stops || !stops.length) {
-    list.innerHTML = '<div id="empty-msg" style="text-align:center;color:#aaa;font-size:13px;margin-top:60px;line-height:2.4;white-space:pre-line">' + t('noStops') + '</div>';
+    list.innerHTML = '<div style="text-align:center;color:#aaa;font-size:15px;margin-top:60px;line-height:2.4;">' + t('noStops') + '</div>';
     return;
   }
 

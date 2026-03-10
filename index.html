@@ -62,7 +62,7 @@
     }
     #gps-btn {
       width: 100%; padding: 13px;
-      font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700;
+      font-family: 'Noto Sans JP', sans-serif; font-size: 17px; font-weight: 700;
       background: var(--brand); color: #fff;
       border: none; border-radius: 12px; cursor: pointer; transition: opacity 0.2s;
     }
@@ -70,19 +70,19 @@
     #search-row { display: flex; gap: 8px; }
     #search-input {
       flex: 1; padding: 11px 14px;
-      font-family: 'Noto Sans JP', sans-serif; font-size: 14px;
+      font-family: 'Noto Sans JP', sans-serif; font-size: 16px;
       border: 2px solid #ddd; border-radius: 12px; outline: none;
       transition: border-color 0.2s;
     }
     #search-input:focus { border-color: var(--brand); }
     #search-submit {
       padding: 11px 16px;
-      font-family: 'Noto Sans JP', sans-serif; font-size: 13px; font-weight: 700;
+      font-family: 'Noto Sans JP', sans-serif; font-size: 16px; font-weight: 700;
       background: #555; color: #fff;
       border: none; border-radius: 12px; cursor: pointer; white-space: nowrap;
     }
     #search-submit:active { opacity: 0.7; }
-    #search-status { font-size: 11px; color: #aaa; padding: 0 2px; min-height: 14px; }
+    #search-status { font-size: 13px; color: #aaa; padding: 0 2px; min-height: 14px; }
 
     #stop-list {
       flex: 1; overflow-y: auto; padding: 12px 14px;
@@ -95,22 +95,22 @@
     }
     .stop-card:active { transform: scale(0.98); }
     .stop-dist {
-      font-size: 12px; font-weight: 700; color: #fff;
+      font-size: 13px; font-weight: 700; color: #fff;
       background: var(--brand); border-radius: 8px;
       padding: 4px 8px; flex-shrink: 0; min-width: 56px; text-align: center;
     }
     .stop-dist.no-gps { background: #999; }
-    .stop-name  { font-size: 16px; font-weight: 900; flex: 1; }
+    .stop-name  { font-size: 18px; font-weight: 900; flex: 1; }
     .stop-arrow { font-size: 18px; color: #ccc; }
     .stop-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
     .stop-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .stop-op-badge {
-      font-size: 9px; font-weight: 700; color: #fff;
+      font-size: 11px; font-weight: 700; color: #fff;
       border-radius: 4px; padding: 2px 6px; white-space: nowrap; flex-shrink: 0;
     }
     .stop-routes { display: flex; flex-wrap: wrap; gap: 4px; }
     .stop-route-tag {
-      font-size: 10px; font-weight: 700; color: #fff;
+      font-size: 12px; font-weight: 700; color: #fff;
       background: #888; border-radius: 4px; padding: 2px 6px;
     }
 
@@ -281,7 +281,24 @@
     <div id="search-status"></div>
   </div>
   <div id="stop-list">
-    <div id="empty-msg">バス停名を入力するか&#10;現在地ボタンで検索できます</div>
+    <div id="empty-msg">
+      <p id="empty-text" style="text-align:center;color:#aaa;font-size:14px;margin-bottom:16px;white-space:pre-line">バス停名を入力するか
+現在地ボタンで検索できます</p>
+      <p style="text-align:center;font-size:12px;color:#bbb;margin-bottom:10px;font-weight:700;letter-spacing:0.08em">対応バス会社</p>
+      <div id="operator-list" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:0 8px;">
+        <span style="background:#009944;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">都営バス</span>
+        <span style="background:#E60012;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">東急バス</span>
+        <span style="background:#0068B7;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">神奈中バス</span>
+        <span style="background:#6C4B9E;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">京王バス</span>
+        <span style="background:#F5A200;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">京成バス</span>
+        <span style="background:#009944;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">関東バス</span>
+        <span style="background:#1B447B;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">西武バス</span>
+        <span style="background:#E85100;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">国際興業バス</span>
+        <span style="background:#00A0C8;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">川崎鶴見臨港</span>
+        <span style="background:#009944;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">川崎市バス</span>
+        <span style="background:#E60087;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:5px 12px;">伊豆箱根バス</span>
+      </div>
+    </div>
   </div>
 </div>
 
