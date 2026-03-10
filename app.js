@@ -72,17 +72,6 @@ const I18N = {
     noTimetable:       '時刻表データがありません',
     meter:             'm',
     nearStop:          'バス停',
-    routeTab:          'ルート検索',
-    stopTab:           'バス停検索',
-    routeFrom:         '出発バス停',
-    routeTo:           '目的地バス停名',
-    routeSearch:       'ルート検索',
-    routeSearching:    '検索中...',
-    directRoute:       '直通',
-    stops:             '停留所',
-    noRoute:           '直通ルートが見つかりません',
-    selectFrom:        '出発バス停を選択してください',
-    selectDest:        '目的地バス停名を入力してください',
   },
   en: {
     appTitle:          '🚌 Metro Bus NAVI',
@@ -104,17 +93,6 @@ const I18N = {
     noTimetable:       'No timetable available',
     meter:             'm',
     nearStop:          'Stop',
-    routeTab:          'Route Search',
-    stopTab:           'Stop Search',
-    routeFrom:         'From Stop',
-    routeTo:           'Destination Stop',
-    routeSearch:       'Search Route',
-    routeSearching:    'Searching...',
-    directRoute:       'Direct',
-    stops:             'stops',
-    noRoute:           'No direct route found',
-    selectFrom:        'Please select a departure stop first',
-    selectDest:        'Enter destination stop name',
   },
 };
 
@@ -135,8 +113,6 @@ function applyLang() {
   document.getElementById('search-submit').textContent     = t('searchBtn');
   document.getElementById('tt-back').textContent           = '◀ ' + t('back');
   document.getElementById('cd-back').textContent           = '◀ ' + t('ttBack');
-  var routeFromLabel = document.getElementById('route-from-label');
-  if (routeFromLabel && !routeFromStop) routeFromLabel.textContent = t('selectFrom');
   const emptyMsg = document.getElementById('empty-msg');
   if (emptyMsg) emptyMsg.textContent = t('emptyMsg');
 }
@@ -154,7 +130,7 @@ let tickTimer        = null;
 //  VIEW SWITCH
 // =============================================
 function showView(id) {
-  ['view-search','view-timetable','view-countdown','view-route'].forEach(v => {
+  ['view-search','view-timetable','view-countdown'].forEach(v => {
     var el = document.getElementById(v);
     if (el) el.classList.remove('active');
   });
@@ -299,13 +275,10 @@ function escHtml(str) {
 // =============================================
 //  時刻表
 // =============================================
-async function selectStop(id, name, operatorColor) {
+async function selectStop(id, name) {
   currentStop = { id: id, name: name };
   // ルート検索の出発地として記憶
   setRouteFrom(id, name, operatorColor);
-  // ルート検索ヒントボタンを表示
-  var hint = document.getElementById('route-search-hint');
-  if (hint) hint.style.display = '';
   // 出発バス停のドット色を更新
   var dot = document.getElementById('route-from-dot');
   if (dot) dot.style.background = operatorColor || '#009944';
@@ -526,125 +499,3 @@ function clearAlert() {
 // =============================================
 applyLang();
 
-// =============================================
-//  ルート検索
-// =============================================
-var routeFromStop = null;  // { id, name, operatorColor }
-
-function openRouteSearch() {
-  var fromEl = document.getElementById('route-from-label');
-  if (fromEl) {
-    fromEl.textContent = routeFromStop
-      ? routeFromStop.name
-      : t('selectFrom');
-  }
-  document.getElementById('route-to-input').value = '';
-  document.getElementById('route-results').innerHTML = '';
-  showView('view-route');
-}
-
-function setRouteFrom(id, name, operatorColor) {
-  routeFromStop = { id: id, name: name, operatorColor: operatorColor || '#009944' };
-}
-
-async function searchRoute() {
-  if (!routeFromStop) {
-    alert(t('selectFrom'));
-    return;
-  }
-  var toQuery = document.getElementById('route-to-input').value.trim();
-  if (!toQuery) {
-    alert(t('selectDest'));
-    return;
-  }
-
-  var btn     = document.getElementById('route-search-btn');
-  var results = document.getElementById('route-results');
-  btn.disabled    = true;
-  btn.textContent = t('routeSearching');
-  results.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px 0">検索中...</p>';
-
-  try {
-    var url  = WORKER_URL + '?mode=route&from=' + encodeURIComponent(routeFromStop.id)
-                          + '&to=' + encodeURIComponent(toQuery);
-    var res  = await fetch(url);
-    var data = await res.json();
-    renderRouteResults(data);
-  } catch(e) {
-    results.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px 0">エラーが発生しました</p>';
-    console.error(e);
-  }
-  btn.disabled    = false;
-  btn.textContent = t('routeSearch');
-}
-
-function renderRouteResults(data) {
-  var el = document.getElementById('route-results');
-
-  if (!data.routes || !data.routes.length) {
-    el.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px 0;line-height:2">'
-      + t('noRoute') + '<br><small>別の目的地バス停名を試してください</small></p>';
-    return;
-  }
-
-  el.innerHTML = data.routes.map(function(r) {
-    var color = r.operatorColor || '#009944';
-    return '<div class="route-card" onclick="selectRoute(\'' + escHtml(r.from.id) + '\',\''
-      + escHtml(r.routeName) + '\',\'' + escHtml(r.to.name) + '\')">'
-      + '<div class="route-card-header">'
-      + '<span class="route-op-badge" style="background:' + color + '">' + escHtml(r.operatorName) + '</span>'
-      + '<span class="route-type-badge">' + t('directRoute') + '</span>'
-      + '</div>'
-      + '<div class="route-card-body">'
-      + '<div class="route-line">'
-      + '<span class="route-from-name">' + escHtml(r.from.name) + '</span>'
-      + '<span class="route-arrow-line">―― ' + escHtml(r.routeName) + ' ──▶</span>'
-      + '<span class="route-to-name">' + escHtml(r.to.name) + '</span>'
-      + '</div>'
-      + '<div class="route-meta">' + r.stopsCount + ' ' + t('stops') + '</div>'
-      + '</div>'
-      + '</div>';
-  }).join('');
-}
-
-function selectRoute(fromPoleId, routeName, toName) {
-  // 出発バス停の時刻表を取得してカウントダウンへ
-  currentStop = routeFromStop;
-  var destLabel = document.getElementById('cd-route-name');
-  // 行先として to名を表示
-  selectStopForRoute(fromPoleId, routeName, toName);
-}
-
-async function selectStopForRoute(poleId, routeName, toName) {
-  currentStop = routeFromStop;
-  document.getElementById('tt-stop-name').textContent = (routeFromStop ? routeFromStop.name : '') + ' → ' + toName;
-  showView('view-timetable');
-  document.getElementById('tt-body').innerHTML =
-    '<p style="text-align:center;color:#aaa;padding:40px 0">' + t('loading') + '</p>';
-
-  try {
-    var url  = WORKER_URL + '?mode=timetable&pole=' + encodeURIComponent(poleId);
-    var res  = await fetch(url);
-    var data = await res.json();
-    parseTimetable(data);
-    // 指定路線のみ表示
-    currentTimetable = currentTimetable.filter(function(item) {
-      return item.route === routeName || item.route.includes(routeName);
-    });
-    if (!currentTimetable.length) {
-      // フィルタで全消えたら全部表示
-      parseTimetable(data);
-    }
-    renderTimetable();
-    var next = findNextBus();
-    if (next) {
-      showCountdown(next.bus.ms, next.bus.route, next.isFirstBus);
-    } else {
-      showView('view-timetable');
-    }
-  } catch(e) {
-    document.getElementById('tt-body').innerHTML =
-      '<p style="text-align:center;color:#aaa;padding:40px 0">' + t('noTimetable') + '</p>';
-    showView('view-timetable');
-  }
-}
